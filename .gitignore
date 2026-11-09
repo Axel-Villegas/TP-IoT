@@ -1,0 +1,9 @@
+# PlatformIO
+.pio/
+
+# VS Code (se conservan las extensiones recomendadas)
+.vscode/*
+!.vscode/extensions.json
+
+# Credenciales reales (usar include/secrets.example.h como plantilla)
+include/secrets.h
