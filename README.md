@@ -36,9 +36,9 @@ En la simulación de Wokwi se agrega además un módulo relé en paralelo con el
 | --- | --- |
 | `/start` | Muestra el menú con botones (Ver Clima, Encender Relé, Ver Display) |
 | `/clima` | Devuelve la última lectura de temperatura y humedad |
-| `/releon <seg>` | Enciende el relé durante `<seg>` segundos y lo apaga solo (por defecto 5 s) |
-| `/releoff` | Apaga el relé y cancela el temporizador |
-| `/thingup` | Informa el voltaje del potenciómetro, que se publica en ThingSpeak, e indica si supera el umbral |
+| `/releon <seg>` | Enciende el relé durante `<seg>` segundos (1 a 3600) y lo apaga solo (por defecto 5 s). Alias: `/rele on <seg>` |
+| `/releoff` | Apaga el relé y cancela el temporizador. Alias: `/rele off` |
+| `/thingup` | Envía el voltaje del potenciómetro a ThingSpeak en el momento (si pasaron 15 s desde el último envío; si no, avisa en cuántos segundos sale) e indica si supera el umbral |
 | `/displayled` | Muestra en el OLED el estado de los LEDs |
 | `/displaypot` | Muestra en el OLED la lectura y el voltaje del potenciómetro |
 | `/displaydht` | Muestra en el OLED la temperatura y la humedad |
@@ -56,7 +56,9 @@ Cualquier otro `/display...` se informa en el OLED como **comando no identificad
 | Field 2 | Humedad (%) |
 | Field 3 | Voltaje del potenciómetro (V) |
 
-Se publica cada 20 s.
+- **Envío periódico:** cada 20 s, con los tres campos.
+- **Envío a pedido:** `/thingup` publica en el momento si pasaron al menos 15 s desde el último envío (límite de la versión gratuita de ThingSpeak); si no, queda pedido y sale apenas se cumple ese mínimo.
+- Cada envío, periódico o pedido, reinicia el reloj, así nunca hay dos envíos a menos de 15 s.
 
 ## Arquitectura
 
@@ -69,7 +71,7 @@ El programa principal (`src/main.cpp`) solo coordina. Cada parte del sistema es 
 | `AlertaUmbral` | Decide cuándo avisar: una sola vez al cruzar el umbral |
 | `Actuador` | Enciende el relé X segundos y lo apaga solo, sin bloquear |
 | `Pantalla` | Todos los mensajes del display OLED |
-| `Nube` | Publicación en ThingSpeak respetando el límite de tiempo |
+| `Nube` | Publicación en ThingSpeak, periódica y a pedido, respetando el límite de 15 s |
 | `BotTelegram` | Recibe e interpreta comandos, teclado inline y alertas |
 
 Ninguna tarea bloquea a las demás: cada librería lleva su propio reloj con `millis()` y el `loop()` nunca usa `delay()`.
