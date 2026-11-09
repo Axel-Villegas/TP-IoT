@@ -4,7 +4,7 @@ static const char* SEPARADOR = "---------------------";  // 21 guiones = ancho c
 
 // El objeto del display solo guarda la configuracion; el bus I2C arranca en iniciar().
 Pantalla::Pantalla(uint8_t ancho, uint8_t alto, uint8_t direccion)
-    : display(ancho, alto, &Wire, -1), direccion(direccion) {}
+    : display(ancho, alto, &Wire, -1), direccion(direccion), mostrandoInicio(false) {}
 
 bool Pantalla::iniciar() {
   if (!display.begin(direccion, true)) {
@@ -28,6 +28,13 @@ void Pantalla::mostrarInicio(EstadoWifi wifi, const String& ip) {
 
   String lineas[] = {"GUARDIA CLIMA", SEPARADOR, lineaWifi, lineaIp, "", "Esperando comandos"};
   mostrarLineas(lineas, 6);
+  mostrandoInicio = true;  // Despues de mostrarLineas(), que lo pone en false
+}
+
+// La pantalla de inicio se refresca con el WiFi solo mientras siga visible;
+// cualquier otra pantalla queda fija (spec, seccion 5).
+bool Pantalla::inicioVisible() {
+  return mostrandoInicio;
 }
 
 void Pantalla::mostrarLeds(bool verdeEncendido, bool azulEncendido) {
@@ -93,6 +100,7 @@ void Pantalla::mostrarNoIdentificado(const String& comando) {
 // Helper comun: limpia, escribe una linea por renglon y recien al final
 // manda el buffer al display (un solo display() evita parpadeos).
 void Pantalla::mostrarLineas(const String lineas[], uint8_t cantidad) {
+  mostrandoInicio = false;  // Toda pantalla nueva reemplaza a la de inicio
   display.clearDisplay();
   display.setCursor(0, 0);
   for (uint8_t i = 0; i < cantidad && i < MAX_LINEAS; i++) {

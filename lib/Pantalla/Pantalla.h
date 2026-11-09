@@ -19,6 +19,7 @@ class Pantalla {
     void mostrarDht(bool hayLectura, float temperatura, float humedad);
     void mostrarRele(bool encendido, unsigned long segundosRestantes);
     void mostrarNoIdentificado(const String& comando);
+    bool inicioVisible();
 
   private:
     static const uint8_t MAX_LINEAS = 8;
@@ -26,6 +27,7 @@ class Pantalla {
 
     Adafruit_SH1106G display;
     uint8_t direccion;
+    bool mostrandoInicio;
 
     void mostrarLineas(const String lineas[], uint8_t cantidad);
     String adaptarLinea(const String& texto);

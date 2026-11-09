@@ -20,27 +20,28 @@
 #include "Nube.h"
 #include "BotTelegram.h"
 
+// --- Estado del WiFi ---
+// La escriben los eventos (otra tarea del sistema), por eso es volatile.
+volatile bool wifiConectado = false;
+// Ultimo estado que proceso el loop(): solo lo toca el loop(). Es tambien el
+// estado del LED azul, por eso el bot lo recibe por referencia (para /displayled).
+bool wifiAnterior = false;
+
 // --- Objetos del sistema (los constructores solo guardan parametros) ---
 Actuador actuador(PIN_LED_VERDE);
 Potenciometro potenciometro(PIN_POTENCIOMETRO, VOLTAJE_REFERENCIA, ADC_MAXIMO);
 SensorAmbiente sensor(PIN_DHT, INTERVALO_DHT_MS);
 Pantalla pantalla(OLED_ANCHO, OLED_ALTO, OLED_DIRECCION);
 Nube nube(TS_CHANNEL_ID, TS_WRITE_API_KEY, INTERVALO_THINGSPEAK_MS, INTERVALO_MINIMO_THINGSPEAK_MS);
-BotTelegram bot(BOT_TOKEN, CHAT_ID, INTERVALO_BOT_MS, sensor, actuador,
-                RELE_SEGUNDOS_DEFECTO, RELE_SEGUNDOS_MAXIMO);
+
+const ConfiguracionBot configBot = {
+  BOT_TOKEN, CHAT_ID, INTERVALO_BOT_MS,
+  RELE_SEGUNDOS_DEFECTO, RELE_SEGUNDOS_MAXIMO, UMBRAL_VOLTAJE
+};
+BotTelegram bot(configBot, sensor, potenciometro, actuador, pantalla, wifiAnterior);
 
 // ThingSpeak usa HTTP (puerto 80): alcanza un WiFiClient sin TLS, como en la Practica 08.
 WiFiClient clienteThingSpeak;
-
-// --- Estado del WiFi ---
-// La escriben los eventos (otra tarea del sistema), por eso es volatile.
-volatile bool wifiConectado = false;
-// Ultimo estado que proceso el loop(): solo lo toca el loop().
-bool wifiAnterior = false;
-
-// La pantalla de inicio se refresca con el WiFi solo mientras siga visible;
-// una pantalla pedida con /display queda fija (spec, seccion 5).
-bool pantallaInicioVisible = true;
 
 float ultimoVoltajeLogueado = -1.0f;  // -1 fuerza el primer log
 
@@ -84,7 +85,7 @@ void setup() {
   bot.iniciar();
   Serial.printf("[SISTEMA] Heap libre al terminar el setup: %u bytes\r\n", ESP.getFreeHeap());
 
-  Serial.println("[SISTEMA] Listo. Prueba por serie: led, pot, dht, rele, inicio, on, off, ts");
+  Serial.println("[SISTEMA] Listo. Prueba por serie: ts (envio pedido a ThingSpeak)");
 }
 
 void loop() {
@@ -164,7 +165,8 @@ void aplicarEstadoWifi(bool conectado) {
     Serial.println("[WIFI] Sin conexion, reintentando...");
   }
 
-  if (pantallaInicioVisible) {
+  // Solo si sigue en la pantalla de inicio: una pantalla de /display queda fija.
+  if (pantalla.inicioVisible()) {
     pantalla.mostrarInicio(conectado ? EstadoWifi::CONECTADO : EstadoWifi::SIN_RED, ip);
   }
 }
@@ -192,8 +194,9 @@ void registrarPotenciometro() {
 
 // ---------------------------------------------------------------- Prueba por serie
 
-// Prueba de pantallas desde el monitor serie, como el control por Serial de la
-// Clase 2. En la etapa 6 lo reemplaza /display<cmd>.
+// Prueba temporal por el monitor serie (como el control por Serial de la Clase 2).
+// Las pantallas ya se manejan con /display<cmd>; queda solo "ts", que en la
+// etapa 7 reemplaza /thingup.
 void revisarComandoSerie() {
   if (Serial.available() == 0) {
     return;
@@ -204,32 +207,7 @@ void revisarComandoSerie() {
 
   if (comando == "ts") {
     probarEnvioPedido();
-    return;
   }
-
-  float voltaje = potenciometro.voltaje();
-  pantallaInicioVisible = false;
-  if (comando == "led") {
-    pantalla.mostrarLeds(actuador.encendido(), wifiAnterior);  // LED azul = estado del WiFi
-  } else if (comando == "pot") {
-    pantalla.mostrarPotenciometro(potenciometro.lectura(), voltaje, UMBRAL_VOLTAJE,
-                                  voltaje >= UMBRAL_VOLTAJE);
-  } else if (comando == "dht") {
-    pantalla.mostrarDht(sensor.hayLectura(), sensor.temperatura(), sensor.humedad());
-  } else if (comando == "rele") {
-    pantalla.mostrarRele(actuador.encendido(), actuador.segundosRestantes());
-  } else if (comando == "on") {
-    actuador.encender(RELE_SEGUNDOS_DEFECTO);
-  } else if (comando == "off") {
-    actuador.apagar();
-  } else if (comando == "inicio") {
-    pantallaInicioVisible = true;
-    pantalla.mostrarInicio(wifiAnterior ? EstadoWifi::CONECTADO : EstadoWifi::SIN_RED,
-                           wifiAnterior ? WiFi.localIP().toString() : "");
-  } else {
-    pantalla.mostrarNoIdentificado(comando);
-  }
-  Serial.println("[OLED] Pantalla: " + (comando.length() > 0 ? comando : String("(vacio)")));
 }
 
 // Prueba de la etapa 3: simula el envio pedido de /thingup (etapa 7).

@@ -2,19 +2,19 @@
 
 // El bot recibe el cliente seguro por referencia: se construye antes que el bot
 // porque esta declarado primero en la clase (los miembros se inicializan en ese orden).
-BotTelegram::BotTelegram(const char* token, const char* chatAutorizado, unsigned long intervaloMs,
-                         SensorAmbiente& sensor, Actuador& actuador,
-                         unsigned long releSegundosDefecto, unsigned long releSegundosMaximo)
+BotTelegram::BotTelegram(const ConfiguracionBot& config, SensorAmbiente& sensor,
+                         Potenciometro& potenciometro, Actuador& actuador, Pantalla& pantalla,
+                         const bool& ledAzulEncendido)
     : cliente(),
-      bot(token, cliente),
-      chatAutorizado(chatAutorizado),
-      intervaloMs(intervaloMs),
+      bot(config.token, cliente),
+      config(config),
       ultimaRevision(0),
       primeraConsulta(true),
       sensor(sensor),
+      potenciometro(potenciometro),
       actuador(actuador),
-      releSegundosDefecto(releSegundosDefecto),
-      releSegundosMaximo(releSegundosMaximo) {}
+      pantalla(pantalla),
+      ledAzulEncendido(ledAzulEncendido) {}
 
 // Telegram solo acepta HTTPS: el certificado raiz permite verificar
 // que del otro lado esta realmente api.telegram.org (como en la Practica 06).
@@ -25,7 +25,7 @@ void BotTelegram::iniciar() {
 // Polling no bloqueante: cada intervaloMs pregunta si hay mensajes nuevos.
 // Sin WiFi no lo intenta: getUpdates() trabaria el loop() esperando un timeout.
 void BotTelegram::revisar() {
-  if (millis() - ultimaRevision < intervaloMs) {
+  if (millis() - ultimaRevision < config.intervaloMs) {
     return;
   }
   ultimaRevision = millis();
@@ -57,7 +57,7 @@ void BotTelegram::procesarMensajes(int cantidad) {
 
     // Seguridad basica: solo el chat de secrets.h. El resto se ignora,
     // pero se loguea su chat_id (sirve para averiguar el propio).
-    if (chatId != chatAutorizado) {
+    if (chatId != config.chatAutorizado) {
       Serial.println("[BOT] Chat no autorizado: " + chatId + " (texto: " + texto + ")");
       continue;
     }
@@ -70,7 +70,7 @@ void BotTelegram::procesarMensajes(int cantidad) {
   }
 }
 
-// Despacho de comandos: un metodo por comando. Se completa en las etapas 5 a 8.
+// Despacho de comandos: un metodo por comando. Se completa en las etapas 7 y 8.
 void BotTelegram::ejecutarComando(const String& comando) {
   if (comando == "/clima") {
     cmdClima();
@@ -80,6 +80,8 @@ void BotTelegram::ejecutarComando(const String& comando) {
     cmdReleOn(comando.substring(8));  // Alias con espacio: "/rele on 10"
   } else if (comando.startsWith("/releon")) {
     cmdReleOn(comando.substring(7));  // "/releon 10" -> " 10"
+  } else if (comando.startsWith("/display")) {
+    cmdDisplay(comando.substring(8));  // "/displayled" -> "led"
   } else {
     responder("❓ No reconozco ese comando. Mandá /start para ver las opciones.");
   }
@@ -87,7 +89,7 @@ void BotTelegram::ejecutarComando(const String& comando) {
 
 // Todas las respuestas van al chat autorizado (es el unico que se atiende).
 void BotTelegram::responder(const String& texto) {
-  if (!bot.sendMessage(chatAutorizado, texto)) {
+  if (!bot.sendMessage(config.chatAutorizado, texto)) {
     Serial.println("[BOT] Error al enviar la respuesta");
   }
 }
@@ -111,7 +113,7 @@ void BotTelegram::cmdReleOn(const String& argumento) {
   unsigned long segundos;
   if (!leerSegundos(argumento, segundos)) {
     responder("❌ Tiempo inválido. Usá /releon <segundos> (de 1 a " +
-              String(releSegundosMaximo) + ").");
+              String(config.releSegundosMaximo) + ").");
     return;
   }
   actuador.encender(segundos);
@@ -136,7 +138,7 @@ bool BotTelegram::leerSegundos(const String& argumento, unsigned long& segundos)
   String texto = argumento;
   texto.trim();
   if (texto.length() == 0) {
-    segundos = releSegundosDefecto;
+    segundos = config.releSegundosDefecto;
     return true;
   }
   if (texto.length() > 5) {
@@ -148,7 +150,42 @@ bool BotTelegram::leerSegundos(const String& argumento, unsigned long& segundos)
     }
   }
   segundos = texto.toInt();
-  return segundos >= 1 && segundos <= releSegundosMaximo;
+  return segundos >= 1 && segundos <= config.releSegundosMaximo;
+}
+
+// /display<cmd>: el sufijo decide que pantalla mostrar. Es una "foto" del
+// momento del comando: queda fija hasta el proximo /display (spec, seccion 5).
+// Cualquier otro sufijo (incluido vacio) se informa en el OLED y por Telegram.
+void BotTelegram::cmdDisplay(const String& sufijo) {
+  String cmd = sufijo;
+  cmd.trim();  // "/display led" se acepta igual que "/displayled"
+
+  String componente;
+  if (cmd == "led") {
+    pantalla.mostrarLeds(actuador.encendido(), ledAzulEncendido);
+    componente = "LEDs";
+  } else if (cmd == "pot") {
+    float voltaje = potenciometro.voltaje();
+    pantalla.mostrarPotenciometro(potenciometro.lectura(), voltaje, config.umbralVoltaje,
+                                  voltaje >= config.umbralVoltaje);
+    componente = "potenciómetro";
+  } else if (cmd == "dht") {
+    pantalla.mostrarDht(sensor.hayLectura(), sensor.temperatura(), sensor.humedad());
+    componente = "DHT22";
+  } else if (cmd == "rele") {
+    pantalla.mostrarRele(actuador.encendido(), actuador.segundosRestantes());
+    componente = "relé";
+  } else {
+    pantalla.mostrarNoIdentificado(cmd);
+    String mostrado = cmd.length() > 0 ? cmd : "(vacío)";
+    Serial.println("[OLED] Comando de display no identificado: " + mostrado);
+    responder("❓ Comando de display no identificado: " + mostrado +
+              ". Se informó en la pantalla.");
+    return;
+  }
+
+  Serial.println("[OLED] Pantalla: " + cmd);
+  responder("🖥 Mostrando " + componente + " en el display.");
 }
 
 // Lo llama el main cuando el temporizador del actuador termina.
