@@ -84,10 +84,10 @@ void Nube::enviar(bool hayDht, float temperatura, float humedad, float voltaje, 
   envioSolicitado = false;
 
   if (hayDht) {
-    Serial.printf("[TS] Envio %s: T=%.1f H=%.1f V=%.2f -> %d (%s)\n",
+    Serial.printf("[TS] Envio %s: T=%.1f H=%.1f V=%.2f -> %d (%s)\r\n",
                   motivo, temperatura, humedad, voltaje, resultado, describirResultado(resultado));
   } else {
-    Serial.printf("[TS] Envio %s (sin DHT): V=%.2f -> %d (%s)\n",
+    Serial.printf("[TS] Envio %s (sin DHT): V=%.2f -> %d (%s)\r\n",
                   motivo, voltaje, resultado, describirResultado(resultado));
   }
 }

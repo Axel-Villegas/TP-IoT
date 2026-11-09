@@ -2,15 +2,19 @@
 
 // El bot recibe el cliente seguro por referencia: se construye antes que el bot
 // porque esta declarado primero en la clase (los miembros se inicializan en ese orden).
-BotTelegram::BotTelegram(const char* token, const char* chatAutorizado,
-                         unsigned long intervaloMs, SensorAmbiente& sensor)
+BotTelegram::BotTelegram(const char* token, const char* chatAutorizado, unsigned long intervaloMs,
+                         SensorAmbiente& sensor, Actuador& actuador,
+                         unsigned long releSegundosDefecto, unsigned long releSegundosMaximo)
     : cliente(),
       bot(token, cliente),
       chatAutorizado(chatAutorizado),
       intervaloMs(intervaloMs),
       ultimaRevision(0),
       primeraConsulta(true),
-      sensor(sensor) {}
+      sensor(sensor),
+      actuador(actuador),
+      releSegundosDefecto(releSegundosDefecto),
+      releSegundosMaximo(releSegundosMaximo) {}
 
 // Telegram solo acepta HTTPS: el certificado raiz permite verificar
 // que del otro lado esta realmente api.telegram.org (como en la Practica 06).
@@ -36,7 +40,7 @@ void BotTelegram::revisar() {
 
   if (primeraConsulta) {
     primeraConsulta = false;
-    Serial.printf("[BOT] Primera consulta a Telegram hecha. Heap libre: %u bytes\n",
+    Serial.printf("[BOT] Primera consulta a Telegram hecha. Heap libre: %u bytes\r\n",
                   ESP.getFreeHeap());
   }
 
@@ -70,6 +74,12 @@ void BotTelegram::procesarMensajes(int cantidad) {
 void BotTelegram::ejecutarComando(const String& comando) {
   if (comando == "/clima") {
     cmdClima();
+  } else if (comando == "/releoff" || comando == "/rele off") {
+    cmdReleOff();
+  } else if (comando.startsWith("/rele on")) {
+    cmdReleOn(comando.substring(8));  // Alias con espacio: "/rele on 10"
+  } else if (comando.startsWith("/releon")) {
+    cmdReleOn(comando.substring(7));  // "/releon 10" -> " 10"
   } else {
     responder("❓ No reconozco ese comando. Mandá /start para ver las opciones.");
   }
@@ -93,4 +103,60 @@ void BotTelegram::cmdClima() {
   texto += "💧 Humedad: " + String(sensor.humedad(), 1) + " %\n";
   texto += "🕒 Lectura de hace " + String(sensor.segundosDesdeLectura()) + " s";
   responder(texto);
+}
+
+// /releon [seg]: sin numero usa el valor por defecto. Si ya estaba encendido,
+// encender() reinicia el temporizador con el tiempo nuevo.
+void BotTelegram::cmdReleOn(const String& argumento) {
+  unsigned long segundos;
+  if (!leerSegundos(argumento, segundos)) {
+    responder("❌ Tiempo inválido. Usá /releon <segundos> (de 1 a " +
+              String(releSegundosMaximo) + ").");
+    return;
+  }
+  actuador.encender(segundos);
+  Serial.printf("[RELE] Encendido por %lu s\r\n", segundos);
+  responder("✅ Relé encendido por " + String(segundos) + " s. Se apaga solo.");
+}
+
+void BotTelegram::cmdReleOff() {
+  if (!actuador.encendido()) {
+    responder("ℹ️ El relé ya estaba apagado.");
+    return;
+  }
+  actuador.apagar();
+  Serial.println("[RELE] Apagado por comando");
+  responder("⏹ Relé apagado.");
+}
+
+// Valida el argumento de /releon: vacio -> por defecto; si no, solo digitos
+// y entre 1 y el maximo. Se chequea el largo antes de convertir para que un
+// numero gigante no desborde (ej. "99999999999").
+bool BotTelegram::leerSegundos(const String& argumento, unsigned long& segundos) {
+  String texto = argumento;
+  texto.trim();
+  if (texto.length() == 0) {
+    segundos = releSegundosDefecto;
+    return true;
+  }
+  if (texto.length() > 5) {
+    return false;
+  }
+  for (unsigned int i = 0; i < texto.length(); i++) {
+    if (!isDigit(texto[i])) {
+      return false;  // "abc", "-5", "1.5" -> invalido
+    }
+  }
+  segundos = texto.toInt();
+  return segundos >= 1 && segundos <= releSegundosMaximo;
+}
+
+// Lo llama el main cuando el temporizador del actuador termina.
+void BotTelegram::avisarFinRele() {
+  Serial.println("[RELE] Tiempo cumplido: apagado");
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("[RELE] Sin WiFi: el aviso por Telegram no se envia");
+    return;
+  }
+  responder("⏱ Se cumplió el tiempo: relé apagado.");
 }

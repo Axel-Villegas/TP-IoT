@@ -26,7 +26,8 @@ Potenciometro potenciometro(PIN_POTENCIOMETRO, VOLTAJE_REFERENCIA, ADC_MAXIMO);
 SensorAmbiente sensor(PIN_DHT, INTERVALO_DHT_MS);
 Pantalla pantalla(OLED_ANCHO, OLED_ALTO, OLED_DIRECCION);
 Nube nube(TS_CHANNEL_ID, TS_WRITE_API_KEY, INTERVALO_THINGSPEAK_MS, INTERVALO_MINIMO_THINGSPEAK_MS);
-BotTelegram bot(BOT_TOKEN, CHAT_ID, INTERVALO_BOT_MS, sensor);
+BotTelegram bot(BOT_TOKEN, CHAT_ID, INTERVALO_BOT_MS, sensor, actuador,
+                RELE_SEGUNDOS_DEFECTO, RELE_SEGUNDOS_MAXIMO);
 
 // ThingSpeak usa HTTP (puerto 80): alcanza un WiFiClient sin TLS, como en la Practica 08.
 WiFiClient clienteThingSpeak;
@@ -81,7 +82,7 @@ void setup() {
   // 4. Servicios de red (no usan la red hasta que haya WiFi)
   nube.iniciar(clienteThingSpeak);
   bot.iniciar();
-  Serial.printf("[SISTEMA] Heap libre al terminar el setup: %u bytes\n", ESP.getFreeHeap());
+  Serial.printf("[SISTEMA] Heap libre al terminar el setup: %u bytes\r\n", ESP.getFreeHeap());
 
   Serial.println("[SISTEMA] Listo. Prueba por serie: led, pot, dht, rele, inicio, on, off, ts");
 }
@@ -93,6 +94,12 @@ void loop() {
   registrarPotenciometro();
 
   revisarCambioWifi();
+
+  // Antes que la red: un envio a ThingSpeak o una consulta a Telegram pueden
+  // tardar, y el rele tiene que apagarse a tiempo igual.
+  if (actuador.actualizar()) {
+    bot.avisarFinRele();
+  }
 
   nube.actualizar(sensor.hayLectura(), sensor.temperatura(), sensor.humedad(),
                   potenciometro.voltaje());
@@ -122,7 +129,7 @@ void conectarWifi() {
   Serial.println();
 
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.printf("[WIFI] Sin conexion despues de %lu s: se sigue arrancando\n",
+    Serial.printf("[WIFI] Sin conexion despues de %lu s: se sigue arrancando\r\n",
                   TIMEOUT_WIFI_INICIAL_MS / 1000);
   }
 }
@@ -167,7 +174,7 @@ void aplicarEstadoWifi(bool conectado) {
 // Loguea solo cuando hubo un intento de lectura (cada 2 s), no en cada vuelta.
 void registrarLecturaDht(ResultadoLectura resultado) {
   if (resultado == ResultadoLectura::NUEVA) {
-    Serial.printf("[DHT] Temp: %.1f C | Hum: %.1f %%\n", sensor.temperatura(), sensor.humedad());
+    Serial.printf("[DHT] Temp: %.1f C | Hum: %.1f %%\r\n", sensor.temperatura(), sensor.humedad());
   } else if (resultado == ResultadoLectura::INVALIDA) {
     Serial.println("[DHT] Lectura invalida (NaN): se conserva la anterior");
   }
@@ -179,7 +186,7 @@ void registrarPotenciometro() {
   float voltaje = potenciometro.voltaje();
   if (fabsf(voltaje - ultimoVoltajeLogueado) >= VARIACION_LOG_VOLTAJE) {
     ultimoVoltajeLogueado = voltaje;
-    Serial.printf("[POT] Lectura: %d | Voltaje: %.2f V\n", potenciometro.lectura(), voltaje);
+    Serial.printf("[POT] Lectura: %d | Voltaje: %.2f V\r\n", potenciometro.lectura(), voltaje);
   }
 }
 
@@ -210,9 +217,9 @@ void revisarComandoSerie() {
   } else if (comando == "dht") {
     pantalla.mostrarDht(sensor.hayLectura(), sensor.temperatura(), sensor.humedad());
   } else if (comando == "rele") {
-    pantalla.mostrarRele(actuador.encendido(), 0);
+    pantalla.mostrarRele(actuador.encendido(), actuador.segundosRestantes());
   } else if (comando == "on") {
-    actuador.encender();
+    actuador.encender(RELE_SEGUNDOS_DEFECTO);
   } else if (comando == "off") {
     actuador.apagar();
   } else if (comando == "inicio") {
@@ -231,10 +238,10 @@ void probarEnvioPedido() {
                                         sensor.humedad(), potenciometro.voltaje());
   switch (r) {
     case ResultadoEnvio::ENVIADO:
-      Serial.printf("[TS] Prueba: enviado en el momento (codigo %d)\n", nube.ultimoResultado());
+      Serial.printf("[TS] Prueba: enviado en el momento (codigo %d)\r\n", nube.ultimoResultado());
       break;
     case ResultadoEnvio::EN_ESPERA:
-      Serial.printf("[TS] Prueba: queda pedido, sale en %lu s\n", nube.segundosParaProximoEnvio());
+      Serial.printf("[TS] Prueba: queda pedido, sale en %lu s\r\n", nube.segundosParaProximoEnvio());
       break;
     case ResultadoEnvio::SIN_WIFI:
       Serial.println("[TS] Prueba: sin WiFi, sale cuando vuelva la red");
