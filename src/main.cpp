@@ -17,12 +17,17 @@
 #include "Potenciometro.h"
 #include "SensorAmbiente.h"
 #include "Pantalla.h"
+#include "Nube.h"
 
 // --- Objetos del sistema (los constructores solo guardan parametros) ---
 Actuador actuador(PIN_LED_VERDE);
 Potenciometro potenciometro(PIN_POTENCIOMETRO, VOLTAJE_REFERENCIA, ADC_MAXIMO);
 SensorAmbiente sensor(PIN_DHT, INTERVALO_DHT_MS);
 Pantalla pantalla(OLED_ANCHO, OLED_ALTO, OLED_DIRECCION);
+Nube nube(TS_CHANNEL_ID, TS_WRITE_API_KEY, INTERVALO_THINGSPEAK_MS, INTERVALO_MINIMO_THINGSPEAK_MS);
+
+// ThingSpeak usa HTTP (puerto 80): alcanza un WiFiClient sin TLS, como en la Practica 08.
+WiFiClient clienteThingSpeak;
 
 // --- Estado del WiFi ---
 // La escriben los eventos (otra tarea del sistema), por eso es volatile.
@@ -44,6 +49,7 @@ void aplicarEstadoWifi(bool conectado);
 void registrarLecturaDht(ResultadoLectura resultado);
 void registrarPotenciometro();
 void revisarComandoSerie();
+void probarEnvioPedido();
 
 void setup() {
   // 1. Serial
@@ -70,8 +76,10 @@ void setup() {
   wifiAnterior = wifiConectado;
   aplicarEstadoWifi(wifiAnterior);  // Log, LED azul y pantalla con el estado inicial
 
-  // 4. Servicios de red: etapas 3 y 4.
-  Serial.println("[SISTEMA] Listo. Prueba de pantallas: escribir led, pot, dht, rele u otro texto");
+  // 4. Servicios de red (no usan la red hasta que haya WiFi)
+  nube.iniciar(clienteThingSpeak);
+
+  Serial.println("[SISTEMA] Listo. Prueba por serie: led, pot, dht, rele, inicio, on, off, ts");
 }
 
 void loop() {
@@ -81,6 +89,9 @@ void loop() {
   registrarPotenciometro();
 
   revisarCambioWifi();
+
+  nube.actualizar(sensor.hayLectura(), sensor.temperatura(), sensor.humedad(),
+                  potenciometro.voltaje());
 
   revisarComandoSerie();
 }
@@ -178,6 +189,11 @@ void revisarComandoSerie() {
   comando.trim();
   comando.toLowerCase();
 
+  if (comando == "ts") {
+    probarEnvioPedido();
+    return;
+  }
+
   float voltaje = potenciometro.voltaje();
   pantallaInicioVisible = false;
   if (comando == "led") {
@@ -201,4 +217,21 @@ void revisarComandoSerie() {
     pantalla.mostrarNoIdentificado(comando);
   }
   Serial.println("[OLED] Pantalla: " + (comando.length() > 0 ? comando : String("(vacio)")));
+}
+
+// Prueba de la etapa 3: simula el envio pedido de /thingup (etapa 7).
+void probarEnvioPedido() {
+  ResultadoEnvio r = nube.intentarEnvio(sensor.hayLectura(), sensor.temperatura(),
+                                        sensor.humedad(), potenciometro.voltaje());
+  switch (r) {
+    case ResultadoEnvio::ENVIADO:
+      Serial.printf("[TS] Prueba: enviado en el momento (codigo %d)\n", nube.ultimoResultado());
+      break;
+    case ResultadoEnvio::EN_ESPERA:
+      Serial.printf("[TS] Prueba: queda pedido, sale en %lu s\n", nube.segundosParaProximoEnvio());
+      break;
+    case ResultadoEnvio::SIN_WIFI:
+      Serial.println("[TS] Prueba: sin WiFi, sale cuando vuelva la red");
+      break;
+  }
 }
