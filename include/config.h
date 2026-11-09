@@ -22,6 +22,7 @@ constexpr uint8_t OLED_ALTO      = 64;
 constexpr float VOLTAJE_REFERENCIA = 3.3f;
 constexpr int   ADC_MAXIMO         = 4095;  // 12 bits
 constexpr float UMBRAL_VOLTAJE     = 2.8f;  // Mismo criterio que la Clase 2
+constexpr float VARIACION_LOG_VOLTAJE = 0.05f;  // Cambio minimo para loguear (filtra el ruido del ADC)
 
 // --- Intervalos (ms) ---
 constexpr unsigned long INTERVALO_DHT_MS               = 2000;   // El DHT22 no lee mas rapido que cada 2 s
