@@ -12,9 +12,7 @@
 #include "Nube.h"
 #include "AlertaUmbral.h"
 
-// Valores de configuracion del bot (salen de config.h y secrets.h en el main).
-// Agruparlos en un struct evita un constructor con una lista larga de numeros
-// sueltos, faciles de pasar en el orden equivocado.
+// Valores de configuracion del bot (salen de config.h y secrets.h).
 struct ConfiguracionBot {
   const char* token;
   const char* chatAutorizado;
@@ -34,10 +32,8 @@ struct ComponentesBot {
   const bool& ledAzulEncendido;
 };
 
-// Bot de Telegram (Practica 06): consulta mensajes nuevos cada intervaloMs
-// (polling), atiende solo al chat autorizado y ejecuta cada comando.
-// Los objetos que necesitan los comandos llegan por referencia en el
-// constructor (inyeccion por constructor): el main no tiene logica de comandos.
+// Bot de Telegram: consulta mensajes nuevos cada intervaloMs (polling),
+// atiende solo al chat autorizado y ejecuta cada comando.
 class BotTelegram {
   public:
     BotTelegram(const ConfiguracionBot& config, const ComponentesBot& componentes);

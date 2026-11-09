@@ -1,7 +1,6 @@
 #include "BotTelegram.h"
 
-// El bot recibe el cliente seguro por referencia: se construye antes que el bot
-// porque esta declarado primero en la clase (los miembros se inicializan en ese orden).
+// cliente se declara antes que bot: los miembros se construyen en ese orden.
 BotTelegram::BotTelegram(const ConfiguracionBot& config, const ComponentesBot& componentes)
     : cliente(),
       bot(config.token, cliente),
@@ -14,8 +13,7 @@ BotTelegram::BotTelegram(const ConfiguracionBot& config, const ComponentesBot& c
       voltajeAlerta(0),
       momentoAlerta(0) {}
 
-// Telegram solo acepta HTTPS: el certificado raiz permite verificar
-// que del otro lado esta realmente api.telegram.org (como en la Practica 06).
+// Telegram solo acepta HTTPS: el certificado raiz valida api.telegram.org.
 void BotTelegram::iniciar() {
   cliente.setCACert(TELEGRAM_CERTIFICATE_ROOT);
 }
@@ -49,9 +47,8 @@ void BotTelegram::revisar() {
                   ESP.getFreeHeap());
   }
 
-  // Un lote por llamada (no un while como en la Practica 06): entre mensaje y
-  // mensaje el loop() vuelve a correr, asi el rele se apaga a tiempo y la
-  // alerta se evalua aunque lleguen muchos comandos seguidos.
+  // Un lote por llamada: entre mensaje y mensaje el loop() vuelve a correr
+  // (rele, alerta, DHT) aunque lleguen muchos comandos seguidos.
   if (cantidad > 0) {
     procesarMensajes(cantidad);
   }
@@ -86,11 +83,9 @@ void BotTelegram::procesarMensajes(int cantidad) {
   }
 }
 
-// Confirma el boton (answerCallbackQuery) SIN cerrar la conexion TLS.
-// answerCallbackQuery() de la libreria cierra la conexion al terminar, y el
-// mensaje siguiente tiene que pagar un handshake TLS nuevo (medido en Wokwi:
-// 5 a 7 s). Con sendPostToTelegram() (publica) la conexion que dejo
-// abierta getUpdates() sigue sirviendo para la respuesta del comando.
+// Confirma el boton (answerCallbackQuery) sin cerrar la conexion TLS: el
+// metodo de la libreria la cierra y el mensaje siguiente pagaria un handshake
+// nuevo. sendPostToTelegram() reutiliza la conexion abierta por getUpdates().
 void BotTelegram::confirmarBoton(const String& idBoton) {
   unsigned long inicio = millis();
 
@@ -136,9 +131,8 @@ void BotTelegram::ejecutarComando(const String& comando) {
   }
 }
 
-// Todas las respuestas van al chat autorizado (es el unico que se atiende).
-// Devuelve si Telegram confirmo el envio (lo usa la alerta para no perderse).
-// Se mide cuanto tarda cada envio: sirve para ver el costo de la red y del TLS.
+// Todas las respuestas van al chat autorizado. Devuelve si Telegram confirmo
+// el envio y loguea cuanto tardo.
 bool BotTelegram::responder(const String& texto) {
   unsigned long inicio = millis();
   bool enviado = bot.sendMessage(config.chatAutorizado, texto);
@@ -187,7 +181,7 @@ void BotTelegram::enviarAlerta(float voltaje) {
 }
 
 // Queda registro del cruce aunque el valor ya se haya normalizado; si es asi,
-// se agrega un segundo mensaje con el valor actual (spec RF6).
+// se agrega un segundo mensaje con el valor actual.
 void BotTelegram::enviarAlertaPendiente() {
   unsigned long segundos = (millis() - momentoAlerta) / 1000;
   bool enviada = responder("🚨 ALERTA (registrada sin conexión): hace " + String(segundos) +
@@ -207,8 +201,7 @@ void BotTelegram::enviarAlertaPendiente() {
 
 // ---------------------------------------------------------------- Comandos
 
-// "Ultimos valores registrados": se responde con la lectura guardada,
-// no se fuerza una lectura nueva (el DHT22 necesita 2 s entre lecturas).
+// Responde con la ultima lectura guardada: el DHT22 necesita 2 s entre lecturas.
 void BotTelegram::cmdClima() {
   SensorAmbiente& sensor = componentes.sensor;
   if (!sensor.hayLectura()) {
@@ -268,7 +261,7 @@ bool BotTelegram::leerSegundos(const String& argumento, unsigned long& segundos)
 }
 
 // /display<cmd>: el sufijo decide que pantalla mostrar. Es una "foto" del
-// momento del comando: queda fija hasta el proximo /display (spec, seccion 5).
+// momento del comando: queda fija hasta el proximo /display.
 // Cualquier otro sufijo (incluido vacio) se informa en el OLED y por Telegram.
 void BotTelegram::cmdDisplay(const String& sufijo) {
   String cmd = sufijo;
@@ -341,8 +334,7 @@ void BotTelegram::cmdThingup() {
 }
 
 // /start: bienvenida con teclado inline. El callback_data de cada boton es el
-// comando que ejecuta: tocar "Ver Clima" es exactamente lo mismo que escribir /clima.
-// R"(...)" es un raw string: las comillas del JSON no necesitan escaparse.
+// comando que ejecuta.
 void BotTelegram::cmdStart() {
   String texto = "👮 Guardia Clima\n";
   texto += "Supervisión ambiental de la placa UTN.\n";

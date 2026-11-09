@@ -8,7 +8,7 @@
 // Que paso con un envio pedido por /thingup.
 enum class ResultadoEnvio { ENVIADO, EN_ESPERA, SIN_WIFI };
 
-// Publicacion en ThingSpeak (Practica 08): field1 = temperatura,
+// Publicacion en ThingSpeak: field1 = temperatura,
 // field2 = humedad, field3 = voltaje del potenciometro.
 // Envio periodico cada intervaloMs, o pedido (/thingup) apenas pasa
 // intervaloMinimoMs desde el ultimo envio (limite de 15 s del canal).

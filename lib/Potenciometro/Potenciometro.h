@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-// Lee el potenciometro por el ADC y lo convierte a voltaje (Clase 2).
+// Lee el potenciometro por el ADC y lo convierte a voltaje.
 class Potenciometro {
   public:
     Potenciometro(uint8_t pin, float vref, int adcMax);

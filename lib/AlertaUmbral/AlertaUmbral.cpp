@@ -2,9 +2,8 @@
 
 AlertaUmbral::AlertaUmbral(float umbral) : umbralVoltaje(umbral), alertaEnviada(false) {}
 
-// Se llama en cada vuelta del loop(). Devuelve true solo en la vuelta del cruce.
-// Es el patron "anterior vs. actual" del Practico 04: se actua cuando el estado
-// CAMBIA, no mientras se mantiene (si no, saldrian cientos de alertas por segundo).
+// Se llama en cada vuelta del loop(). Devuelve true solo en la vuelta del
+// cruce: se actua cuando el estado cambia, no mientras se mantiene.
 bool AlertaUmbral::evaluar(float voltaje) {
   if (voltaje >= umbralVoltaje && !alertaEnviada) {
     alertaEnviada = true;   // Recien cruzo: se avisa una vez

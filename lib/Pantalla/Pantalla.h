@@ -7,7 +7,7 @@
 
 enum class EstadoWifi { CONECTANDO, CONECTADO, SIN_RED };
 
-// Todas las pantallas del OLED (spec.md, seccion 5).
+// Todas las pantallas del OLED.
 // Fuente tamanio 1: 21 caracteres x 8 lineas, solo ASCII.
 class Pantalla {
   public:

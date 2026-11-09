@@ -2,12 +2,11 @@
 #define CONFIG_H
 
 // Constantes del sistema: pines, umbral e intervalos.
-// Se declaran constexpr para poder incluir este header desde varios archivos
-// sin errores de definicion duplicada (cada constante queda interna a su archivo).
+// constexpr: el header se puede incluir desde varios archivos sin definiciones duplicadas.
 
 #include <stdint.h>
 
-// --- Pines (enunciado, punto 1) ---
+// --- Pines ---
 constexpr uint8_t PIN_DHT           = 33;  // DHT22 (digital, 1 hilo)
 constexpr uint8_t PIN_POTENCIOMETRO = 32;  // ADC1: funciona con WiFi activo
 constexpr uint8_t PIN_LED_VERDE     = 23;  // Representa al rele (actuador principal)
@@ -21,7 +20,7 @@ constexpr uint8_t OLED_ALTO      = 64;
 // --- Potenciometro y alerta ---
 constexpr float VOLTAJE_REFERENCIA = 3.3f;
 constexpr int   ADC_MAXIMO         = 4095;  // 12 bits
-constexpr float UMBRAL_VOLTAJE     = 2.8f;  // Mismo criterio que la Clase 2
+constexpr float UMBRAL_VOLTAJE     = 2.8f;  // Dispara la alerta automatica
 constexpr float VARIACION_LOG_VOLTAJE = 0.05f;  // Cambio minimo para loguear (filtra el ruido del ADC)
 
 // --- Intervalos (ms) ---

@@ -9,7 +9,7 @@ void Actuador::iniciar() {
   apagar();  // Arranca siempre apagado: nunca una carga encendida por accidente
 }
 
-// Si ya estaba encendido, reinicia el temporizador con el tiempo nuevo (spec RF5).
+// Si ya estaba encendido, reinicia el temporizador con el tiempo nuevo.
 void Actuador::encender(unsigned long segundos) {
   digitalWrite(pin, HIGH);
   estado = true;
@@ -24,9 +24,8 @@ void Actuador::apagar() {
   duracionMs = 0;
 }
 
-// En vez de delay(segundos): en cada vuelta del loop() se pregunta si ya
-// se cumplio el tiempo. Devuelve true solo en la vuelta en que se apago solo,
-// para que el main pueda avisar por Telegram una unica vez.
+// Se llama en cada vuelta del loop(): apaga cuando se cumple el tiempo.
+// Devuelve true solo en la vuelta en que se apago solo (para avisar una vez).
 bool Actuador::actualizar() {
   if (estado && millis() - momentoEncendido >= duracionMs) {
     apagar();

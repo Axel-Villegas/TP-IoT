@@ -6,7 +6,7 @@
 #include "config.h"
 
 // Las credenciales viven en include/secrets.h, que no se sube al repo.
-// Si falta, cortamos la compilacion con un mensaje claro en vez de un error confuso.
+// Si falta, la compilacion se detiene con un mensaje claro.
 #if __has_include("secrets.h")
 #include "secrets.h"
 #else
@@ -42,7 +42,7 @@ const ConfiguracionBot configBot = {
 };
 BotTelegram bot(configBot, {sensor, potenciometro, actuador, pantalla, nube, alerta, wifiAnterior});
 
-// ThingSpeak usa HTTP (puerto 80): alcanza un WiFiClient sin TLS, como en la Practica 08.
+// ThingSpeak usa HTTP (puerto 80): alcanza un WiFiClient sin TLS.
 WiFiClient clienteThingSpeak;
 
 float ultimoVoltajeLogueado = -1.0f;  // -1 fuerza el primer log
@@ -116,8 +116,7 @@ void loop() {
 
 // ---------------------------------------------------------------- WiFi
 
-// Como en clase (Practicas 06 y 08): WiFi.begin y espera con puntos.
-// Diferencia: espera como maximo TIMEOUT_WIFI_INICIAL_MS. Si no conecta,
+// Espera la conexion como maximo TIMEOUT_WIFI_INICIAL_MS. Si no conecta,
 // el driver sigue reintentando solo (autoReconnect) y los eventos avisan.
 void conectarWifi() {
   WiFi.mode(WIFI_STA);
@@ -128,7 +127,7 @@ void conectarWifi() {
   Serial.printf("[WIFI] Conectando a %s", WIFI_SSID);
   unsigned long inicio = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - inicio < TIMEOUT_WIFI_INICIAL_MS) {
-    delay(500);  // Solo en el setup(), como en clase: el loop() todavia no arranco
+    delay(500);  // Solo en el setup(): el loop() todavia no arranco
     Serial.print(".");
   }
   Serial.println();
@@ -139,8 +138,8 @@ void conectarWifi() {
   }
 }
 
-// Funciones de evento: corren en otra tarea del sistema, asi que son cortas
-// y solo cambian la bandera. Nada de Serial ni LED aca: eso lo hace el loop().
+// Funciones de evento: corren en otra tarea del sistema, por eso solo
+// cambian la bandera. El log y el LED los aplica el loop().
 void alObtenerIp(WiFiEvent_t evento) {
   wifiConectado = true;
 }

@@ -75,18 +75,15 @@ bool Nube::pasaron(unsigned long ms) {
   return millis() - ultimoEnvio >= ms;
 }
 
-// El minimo de 15 s se cuenta desde el ultimo envio de ESTA ejecucion: si
-// todavia no hubo ninguno (recien arranca la placa), un pedido sale ya.
-// El periodico no usa esto: el primero sale a los 20 s, con el DHT ya leido.
+// El minimo de 15 s se cuenta desde el ultimo envio de esta ejecucion: si
+// todavia no hubo ninguno, un pedido sale ya. El primer periodico sale a los 20 s.
 bool Nube::puedeEnviarPedido() {
   return !huboEnvio || pasaron(intervaloMinimoMs);
 }
 
 // Unico lugar que habla con ThingSpeak: periodico y pedido comparten el codigo.
 // Cada envio (salga bien o mal) reinicia el reloj, asi nunca hay dos a menos de 15 s.
-// Si fallo (ej. -401 porque la placa se reinicio justo despues de un envio
-// anterior, que ThingSpeak todavia cuenta), queda pedido: se reintenta a los
-// 15 s en vez de esperar el periodico de 20 s, y el dato no se pierde.
+// Si fallo, queda pedido y se reintenta a los 15 s.
 void Nube::enviar(bool hayDht, float temperatura, float humedad, float voltaje, const char* motivo) {
   if (hayDht) {
     ThingSpeak.setField(1, temperatura);

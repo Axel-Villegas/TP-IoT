@@ -32,7 +32,7 @@ void Pantalla::mostrarInicio(EstadoWifi wifi, const String& ip) {
 }
 
 // La pantalla de inicio se refresca con el WiFi solo mientras siga visible;
-// cualquier otra pantalla queda fija (spec, seccion 5).
+// cualquier otra pantalla queda fija.
 bool Pantalla::inicioVisible() {
   return mostrandoInicio;
 }

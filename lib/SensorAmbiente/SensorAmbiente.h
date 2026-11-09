@@ -8,7 +8,6 @@
 enum class ResultadoLectura { SIN_CAMBIOS, NUEVA, INVALIDA };
 
 // DHT22: lee cada intervaloMs y guarda la ultima lectura valida.
-// Basada en SensorDHT (Clase 3), pero sin tocar el hardware en el constructor.
 class SensorAmbiente {
   public:
     SensorAmbiente(uint8_t pin, unsigned long intervaloMs);

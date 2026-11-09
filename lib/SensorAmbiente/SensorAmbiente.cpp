@@ -1,6 +1,5 @@
 #include "SensorAmbiente.h"
 
-// DHT22 (no DHT21 como en la Clase 3): es el sensor que pide el enunciado.
 SensorAmbiente::SensorAmbiente(uint8_t pin, unsigned long intervaloMs)
     : sensor(pin, DHT22),
       intervaloMs(intervaloMs),
