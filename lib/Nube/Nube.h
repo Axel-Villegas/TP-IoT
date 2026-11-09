@@ -29,11 +29,13 @@ class Nube {
     unsigned long intervaloMs;
     unsigned long intervaloMinimoMs;
     unsigned long ultimoEnvio;
+    bool huboEnvio;
     bool envioSolicitado;
     int resultado;
 
     bool hayWifi();
     bool pasaron(unsigned long ms);
+    bool puedeEnviarPedido();
     void enviar(bool hayDht, float temperatura, float humedad, float voltaje, const char* motivo);
     const char* describirResultado(int codigo);
 };

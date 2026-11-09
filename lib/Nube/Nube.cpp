@@ -7,6 +7,7 @@ Nube::Nube(unsigned long canal, const char* apiKey,
       intervaloMs(intervaloMs),
       intervaloMinimoMs(intervaloMinimoMs),
       ultimoEnvio(0),
+      huboEnvio(false),
       envioSolicitado(false),
       resultado(0) {}
 
@@ -21,8 +22,9 @@ void Nube::actualizar(bool hayDht, float temperatura, float humedad, float volta
   if (!hayWifi()) {
     return;
   }
-  if (envioSolicitado && pasaron(intervaloMinimoMs)) {
-    enviar(hayDht, temperatura, humedad, voltaje, "pedido");
+  if (envioSolicitado && puedeEnviarPedido()) {
+    // Si el ultimo envio fallo, esto es un reintento; si no, un /thingup en espera.
+    enviar(hayDht, temperatura, humedad, voltaje, resultado != 200 && huboEnvio ? "reintento" : "pedido");
   } else if (pasaron(intervaloMs)) {
     enviar(hayDht, temperatura, humedad, voltaje, "periodico");
   }
@@ -39,7 +41,7 @@ ResultadoEnvio Nube::intentarEnvio(bool hayDht, float temperatura, float humedad
     solicitarEnvio();
     return ResultadoEnvio::SIN_WIFI;
   }
-  if (pasaron(intervaloMinimoMs)) {
+  if (puedeEnviarPedido()) {
     enviar(hayDht, temperatura, humedad, voltaje, "pedido");
     return ResultadoEnvio::ENVIADO;
   }
@@ -50,6 +52,9 @@ ResultadoEnvio Nube::intentarEnvio(bool hayDht, float temperatura, float humedad
 // Con un pedido pendiente se cuenta hasta los 15 s; si no, hasta los 20 s.
 // Redondea hacia arriba: si faltan 0,3 s, informa 1 s (nunca "0 s" antes de tiempo).
 unsigned long Nube::segundosParaProximoEnvio() {
+  if (envioSolicitado && puedeEnviarPedido()) {
+    return 0;
+  }
   unsigned long objetivo = envioSolicitado ? intervaloMinimoMs : intervaloMs;
   unsigned long transcurrido = millis() - ultimoEnvio;
   if (transcurrido >= objetivo) {
@@ -70,8 +75,18 @@ bool Nube::pasaron(unsigned long ms) {
   return millis() - ultimoEnvio >= ms;
 }
 
+// El minimo de 15 s se cuenta desde el ultimo envio de ESTA ejecucion: si
+// todavia no hubo ninguno (recien arranca la placa), un pedido sale ya.
+// El periodico no usa esto: el primero sale a los 20 s, con el DHT ya leido.
+bool Nube::puedeEnviarPedido() {
+  return !huboEnvio || pasaron(intervaloMinimoMs);
+}
+
 // Unico lugar que habla con ThingSpeak: periodico y pedido comparten el codigo.
 // Cada envio (salga bien o mal) reinicia el reloj, asi nunca hay dos a menos de 15 s.
+// Si fallo (ej. -401 porque la placa se reinicio justo despues de un envio
+// anterior, que ThingSpeak todavia cuenta), queda pedido: se reintenta a los
+// 15 s en vez de esperar el periodico de 20 s, y el dato no se pierde.
 void Nube::enviar(bool hayDht, float temperatura, float humedad, float voltaje, const char* motivo) {
   if (hayDht) {
     ThingSpeak.setField(1, temperatura);
@@ -81,7 +96,8 @@ void Nube::enviar(bool hayDht, float temperatura, float humedad, float voltaje, 
 
   resultado = ThingSpeak.writeFields(canal, apiKey);
   ultimoEnvio = millis();
-  envioSolicitado = false;
+  huboEnvio = true;
+  envioSolicitado = (resultado != 200);
 
   if (hayDht) {
     Serial.printf("[TS] Envio %s: T=%.1f H=%.1f V=%.2f -> %d (%s)\r\n",
