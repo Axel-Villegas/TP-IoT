@@ -18,6 +18,7 @@
 #include "SensorAmbiente.h"
 #include "Pantalla.h"
 #include "Nube.h"
+#include "BotTelegram.h"
 
 // --- Objetos del sistema (los constructores solo guardan parametros) ---
 Actuador actuador(PIN_LED_VERDE);
@@ -25,6 +26,7 @@ Potenciometro potenciometro(PIN_POTENCIOMETRO, VOLTAJE_REFERENCIA, ADC_MAXIMO);
 SensorAmbiente sensor(PIN_DHT, INTERVALO_DHT_MS);
 Pantalla pantalla(OLED_ANCHO, OLED_ALTO, OLED_DIRECCION);
 Nube nube(TS_CHANNEL_ID, TS_WRITE_API_KEY, INTERVALO_THINGSPEAK_MS, INTERVALO_MINIMO_THINGSPEAK_MS);
+BotTelegram bot(BOT_TOKEN, CHAT_ID, INTERVALO_BOT_MS, sensor);
 
 // ThingSpeak usa HTTP (puerto 80): alcanza un WiFiClient sin TLS, como en la Practica 08.
 WiFiClient clienteThingSpeak;
@@ -78,6 +80,8 @@ void setup() {
 
   // 4. Servicios de red (no usan la red hasta que haya WiFi)
   nube.iniciar(clienteThingSpeak);
+  bot.iniciar();
+  Serial.printf("[SISTEMA] Heap libre al terminar el setup: %u bytes\n", ESP.getFreeHeap());
 
   Serial.println("[SISTEMA] Listo. Prueba por serie: led, pot, dht, rele, inicio, on, off, ts");
 }
@@ -92,6 +96,8 @@ void loop() {
 
   nube.actualizar(sensor.hayLectura(), sensor.temperatura(), sensor.humedad(),
                   potenciometro.voltaje());
+
+  bot.revisar();
 
   revisarComandoSerie();
 }
