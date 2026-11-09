@@ -2,19 +2,16 @@
 
 // El bot recibe el cliente seguro por referencia: se construye antes que el bot
 // porque esta declarado primero en la clase (los miembros se inicializan en ese orden).
-BotTelegram::BotTelegram(const ConfiguracionBot& config, SensorAmbiente& sensor,
-                         Potenciometro& potenciometro, Actuador& actuador, Pantalla& pantalla,
-                         const bool& ledAzulEncendido)
+BotTelegram::BotTelegram(const ConfiguracionBot& config, const ComponentesBot& componentes)
     : cliente(),
       bot(config.token, cliente),
       config(config),
+      componentes(componentes),
       ultimaRevision(0),
       primeraConsulta(true),
-      sensor(sensor),
-      potenciometro(potenciometro),
-      actuador(actuador),
-      pantalla(pantalla),
-      ledAzulEncendido(ledAzulEncendido) {}
+      alertaPendiente(false),
+      voltajeAlerta(0),
+      momentoAlerta(0) {}
 
 // Telegram solo acepta HTTPS: el certificado raiz permite verificar
 // que del otro lado esta realmente api.telegram.org (como en la Practica 06).
@@ -32,6 +29,11 @@ void BotTelegram::revisar() {
 
   if (WiFi.status() != WL_CONNECTED) {
     return;
+  }
+
+  // Primero lo que quedo pendiente de cuando no habia red.
+  if (alertaPendiente) {
+    enviarAlertaPendiente();
   }
 
   // last_message_received + 1 le dice a Telegram "ya procese hasta este":
@@ -70,7 +72,7 @@ void BotTelegram::procesarMensajes(int cantidad) {
   }
 }
 
-// Despacho de comandos: un metodo por comando. Se completa en las etapas 7 y 8.
+// Despacho de comandos: un metodo por comando. /start llega en la etapa 8.
 void BotTelegram::ejecutarComando(const String& comando) {
   if (comando == "/clima") {
     cmdClima();
@@ -82,21 +84,77 @@ void BotTelegram::ejecutarComando(const String& comando) {
     cmdReleOn(comando.substring(7));  // "/releon 10" -> " 10"
   } else if (comando.startsWith("/display")) {
     cmdDisplay(comando.substring(8));  // "/displayled" -> "led"
+  } else if (comando == "/thingup") {
+    cmdThingup();
   } else {
     responder("❓ No reconozco ese comando. Mandá /start para ver las opciones.");
   }
 }
 
 // Todas las respuestas van al chat autorizado (es el unico que se atiende).
-void BotTelegram::responder(const String& texto) {
+// Devuelve si Telegram confirmo el envio (lo usa la alerta para no perderse).
+bool BotTelegram::responder(const String& texto) {
   if (!bot.sendMessage(config.chatAutorizado, texto)) {
     Serial.println("[BOT] Error al enviar la respuesta");
+    return false;
+  }
+  return true;
+}
+
+// "2.80": el umbral con 2 decimales, para todos los mensajes.
+String BotTelegram::textoUmbral() {
+  return String(componentes.alerta.umbral(), 2);
+}
+
+// ---------------------------------------------------------------- Alerta automatica
+
+// La llama el main en el momento del cruce, sin que nadie la pida.
+// Sin WiFi (o si Telegram no la acepta) queda pendiente con el voltaje y el
+// momento del cruce, para mandarla apenas vuelva la conexion.
+void BotTelegram::enviarAlerta(float voltaje) {
+  Serial.printf("[ALERTA] Cruzo el umbral: %.2f V\r\n", voltaje);
+
+  if (WiFi.status() == WL_CONNECTED &&
+      responder("🚨 ALERTA: el potenciómetro marca " + String(voltaje, 2) +
+                " V y supera el umbral crítico de " + textoUmbral() + " V.")) {
+    Serial.println("[ALERTA] Enviada");
+    return;
+  }
+
+  // Si ya habia una pendiente, se conserva la primera: es el cruce mas viejo sin avisar.
+  if (!alertaPendiente) {
+    alertaPendiente = true;
+    voltajeAlerta = voltaje;
+    momentoAlerta = millis();
+  }
+  Serial.println("[ALERTA] Sin conexion: queda pendiente");
+}
+
+// Queda registro del cruce aunque el valor ya se haya normalizado; si es asi,
+// se agrega un segundo mensaje con el valor actual (spec RF6).
+void BotTelegram::enviarAlertaPendiente() {
+  unsigned long segundos = (millis() - momentoAlerta) / 1000;
+  bool enviada = responder("🚨 ALERTA (registrada sin conexión): hace " + String(segundos) +
+                           " s el potenciómetro llegó a " + String(voltajeAlerta, 2) +
+                           " V y superó el umbral crítico de " + textoUmbral() + " V.");
+  if (!enviada) {
+    return;  // Sigue pendiente: se reintenta en la proxima revision
+  }
+  alertaPendiente = false;
+  Serial.println("[ALERTA] Pendiente enviada");
+
+  float voltajeActual = componentes.potenciometro.voltaje();
+  if (voltajeActual < componentes.alerta.umbral()) {
+    responder("✅ Ahora el valor es normal: " + String(voltajeActual, 2) + " V.");
   }
 }
+
+// ---------------------------------------------------------------- Comandos
 
 // "Ultimos valores registrados": se responde con la lectura guardada,
 // no se fuerza una lectura nueva (el DHT22 necesita 2 s entre lecturas).
 void BotTelegram::cmdClima() {
+  SensorAmbiente& sensor = componentes.sensor;
   if (!sensor.hayLectura()) {
     responder("⚠️ Todavía no hay una lectura válida del DHT22.");
     return;
@@ -116,17 +174,17 @@ void BotTelegram::cmdReleOn(const String& argumento) {
               String(config.releSegundosMaximo) + ").");
     return;
   }
-  actuador.encender(segundos);
+  componentes.actuador.encender(segundos);
   Serial.printf("[RELE] Encendido por %lu s\r\n", segundos);
   responder("✅ Relé encendido por " + String(segundos) + " s. Se apaga solo.");
 }
 
 void BotTelegram::cmdReleOff() {
-  if (!actuador.encendido()) {
+  if (!componentes.actuador.encendido()) {
     responder("ℹ️ El relé ya estaba apagado.");
     return;
   }
-  actuador.apagar();
+  componentes.actuador.apagar();
   Serial.println("[RELE] Apagado por comando");
   responder("⏹ Relé apagado.");
 }
@@ -160,20 +218,22 @@ void BotTelegram::cmdDisplay(const String& sufijo) {
   String cmd = sufijo;
   cmd.trim();  // "/display led" se acepta igual que "/displayled"
 
+  Pantalla& pantalla = componentes.pantalla;
   String componente;
   if (cmd == "led") {
-    pantalla.mostrarLeds(actuador.encendido(), ledAzulEncendido);
+    pantalla.mostrarLeds(componentes.actuador.encendido(), componentes.ledAzulEncendido);
     componente = "LEDs";
   } else if (cmd == "pot") {
-    float voltaje = potenciometro.voltaje();
-    pantalla.mostrarPotenciometro(potenciometro.lectura(), voltaje, config.umbralVoltaje,
-                                  voltaje >= config.umbralVoltaje);
+    pantalla.mostrarPotenciometro(componentes.potenciometro.lectura(),
+                                  componentes.potenciometro.voltaje(),
+                                  componentes.alerta.umbral(), componentes.alerta.activa());
     componente = "potenciómetro";
   } else if (cmd == "dht") {
+    SensorAmbiente& sensor = componentes.sensor;
     pantalla.mostrarDht(sensor.hayLectura(), sensor.temperatura(), sensor.humedad());
     componente = "DHT22";
   } else if (cmd == "rele") {
-    pantalla.mostrarRele(actuador.encendido(), actuador.segundosRestantes());
+    pantalla.mostrarRele(componentes.actuador.encendido(), componentes.actuador.segundosRestantes());
     componente = "relé";
   } else {
     pantalla.mostrarNoIdentificado(cmd);
@@ -186,6 +246,42 @@ void BotTelegram::cmdDisplay(const String& sufijo) {
 
   Serial.println("[OLED] Pantalla: " + cmd);
   responder("🖥 Mostrando " + componente + " en el display.");
+}
+
+// /thingup: envia a ThingSpeak en el momento si se puede (>= 15 s desde el
+// ultimo envio); si no, queda pedido. Informa el voltaje, que paso con el
+// envio y si supera el umbral.
+void BotTelegram::cmdThingup() {
+  Potenciometro& pot = componentes.potenciometro;
+  SensorAmbiente& sensor = componentes.sensor;
+  Nube& nube = componentes.nube;
+  float voltaje = pot.voltaje();
+
+  String texto = "🔌 Potenciómetro: " + String(voltaje, 2) + " V (lectura " +
+                 String(pot.lectura()) + ")\n";
+
+  ResultadoEnvio resultado = nube.intentarEnvio(sensor.hayLectura(), sensor.temperatura(),
+                                                sensor.humedad(), voltaje);
+  switch (resultado) {
+    case ResultadoEnvio::ENVIADO:
+      texto += "☁️ Enviado a ThingSpeak (field3).";
+      if (nube.ultimoResultado() != 200) {
+        texto += "\n⚠️ ThingSpeak respondió " + String(nube.ultimoResultado()) + ".";
+      }
+      break;
+    case ResultadoEnvio::EN_ESPERA:
+      texto += "☁️ Se envía a ThingSpeak en " + String(nube.segundosParaProximoEnvio()) +
+               " s (mínimo 15 s entre envíos).";
+      break;
+    case ResultadoEnvio::SIN_WIFI:
+      texto += "☁️ Sin conexión: se envía cuando vuelva la red.";
+      break;
+  }
+
+  if (componentes.alerta.activa()) {
+    texto += "\n⚠️ Supera el umbral crítico de " + textoUmbral() + " V.";
+  }
+  responder(texto);
 }
 
 // Lo llama el main cuando el temporizador del actuador termina.

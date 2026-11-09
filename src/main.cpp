@@ -18,6 +18,7 @@
 #include "SensorAmbiente.h"
 #include "Pantalla.h"
 #include "Nube.h"
+#include "AlertaUmbral.h"
 #include "BotTelegram.h"
 
 // --- Estado del WiFi ---
@@ -34,11 +35,12 @@ SensorAmbiente sensor(PIN_DHT, INTERVALO_DHT_MS);
 Pantalla pantalla(OLED_ANCHO, OLED_ALTO, OLED_DIRECCION);
 Nube nube(TS_CHANNEL_ID, TS_WRITE_API_KEY, INTERVALO_THINGSPEAK_MS, INTERVALO_MINIMO_THINGSPEAK_MS);
 
+AlertaUmbral alerta(UMBRAL_VOLTAJE);
+
 const ConfiguracionBot configBot = {
-  BOT_TOKEN, CHAT_ID, INTERVALO_BOT_MS,
-  RELE_SEGUNDOS_DEFECTO, RELE_SEGUNDOS_MAXIMO, UMBRAL_VOLTAJE
+  BOT_TOKEN, CHAT_ID, INTERVALO_BOT_MS, RELE_SEGUNDOS_DEFECTO, RELE_SEGUNDOS_MAXIMO
 };
-BotTelegram bot(configBot, sensor, potenciometro, actuador, pantalla, wifiAnterior);
+BotTelegram bot(configBot, {sensor, potenciometro, actuador, pantalla, nube, alerta, wifiAnterior});
 
 // ThingSpeak usa HTTP (puerto 80): alcanza un WiFiClient sin TLS, como en la Practica 08.
 WiFiClient clienteThingSpeak;
@@ -52,8 +54,6 @@ void revisarCambioWifi();
 void aplicarEstadoWifi(bool conectado);
 void registrarLecturaDht(ResultadoLectura resultado);
 void registrarPotenciometro();
-void revisarComandoSerie();
-void probarEnvioPedido();
 
 void setup() {
   // 1. Serial
@@ -85,7 +85,7 @@ void setup() {
   bot.iniciar();
   Serial.printf("[SISTEMA] Heap libre al terminar el setup: %u bytes\r\n", ESP.getFreeHeap());
 
-  Serial.println("[SISTEMA] Listo. Prueba por serie: ts (envio pedido a ThingSpeak)");
+  Serial.println("[SISTEMA] Listo");
 }
 
 void loop() {
@@ -102,12 +102,16 @@ void loop() {
     bot.avisarFinRele();
   }
 
+  // Vigilancia continua: en cada vuelta, no solo cuando alguien manda /thingup.
+  // evaluar() devuelve true una sola vez por cruce del umbral.
+  if (alerta.evaluar(potenciometro.voltaje())) {
+    bot.enviarAlerta(potenciometro.voltaje());
+  }
+
   nube.actualizar(sensor.hayLectura(), sensor.temperatura(), sensor.humedad(),
                   potenciometro.voltaje());
 
   bot.revisar();
-
-  revisarComandoSerie();
 }
 
 // ---------------------------------------------------------------- WiFi
@@ -189,40 +193,5 @@ void registrarPotenciometro() {
   if (fabsf(voltaje - ultimoVoltajeLogueado) >= VARIACION_LOG_VOLTAJE) {
     ultimoVoltajeLogueado = voltaje;
     Serial.printf("[POT] Lectura: %d | Voltaje: %.2f V\r\n", potenciometro.lectura(), voltaje);
-  }
-}
-
-// ---------------------------------------------------------------- Prueba por serie
-
-// Prueba temporal por el monitor serie (como el control por Serial de la Clase 2).
-// Las pantallas ya se manejan con /display<cmd>; queda solo "ts", que en la
-// etapa 7 reemplaza /thingup.
-void revisarComandoSerie() {
-  if (Serial.available() == 0) {
-    return;
-  }
-  String comando = Serial.readStringUntil('\n');
-  comando.trim();
-  comando.toLowerCase();
-
-  if (comando == "ts") {
-    probarEnvioPedido();
-  }
-}
-
-// Prueba de la etapa 3: simula el envio pedido de /thingup (etapa 7).
-void probarEnvioPedido() {
-  ResultadoEnvio r = nube.intentarEnvio(sensor.hayLectura(), sensor.temperatura(),
-                                        sensor.humedad(), potenciometro.voltaje());
-  switch (r) {
-    case ResultadoEnvio::ENVIADO:
-      Serial.printf("[TS] Prueba: enviado en el momento (codigo %d)\r\n", nube.ultimoResultado());
-      break;
-    case ResultadoEnvio::EN_ESPERA:
-      Serial.printf("[TS] Prueba: queda pedido, sale en %lu s\r\n", nube.segundosParaProximoEnvio());
-      break;
-    case ResultadoEnvio::SIN_WIFI:
-      Serial.println("[TS] Prueba: sin WiFi, sale cuando vuelva la red");
-      break;
   }
 }
