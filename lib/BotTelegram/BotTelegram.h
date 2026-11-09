@@ -53,6 +53,7 @@ class BotTelegram {
     ComponentesBot componentes;
     unsigned long ultimaRevision;
     bool primeraConsulta;
+    bool hayMensajesEnCola;
 
     // Alerta que no se pudo mandar en el momento del cruce (sin WiFi)
     bool alertaPendiente;
@@ -62,6 +63,8 @@ class BotTelegram {
     void procesarMensajes(int cantidad);
     void ejecutarComando(const String& comando);
     bool responder(const String& texto);
+    bool responderConTeclado(const String& texto, const String& teclado);
+    void confirmarBoton(const String& idBoton);
     void enviarAlertaPendiente();
     String textoUmbral();
     void cmdClima();
@@ -70,6 +73,8 @@ class BotTelegram {
     bool leerSegundos(const String& argumento, unsigned long& segundos);
     void cmdDisplay(const String& sufijo);
     void cmdThingup();
+    void cmdStart();
+    void cmdMenuDisplay();
 };
 
 #endif

@@ -9,6 +9,7 @@ BotTelegram::BotTelegram(const ConfiguracionBot& config, const ComponentesBot& c
       componentes(componentes),
       ultimaRevision(0),
       primeraConsulta(true),
+      hayMensajesEnCola(false),
       alertaPendiente(false),
       voltajeAlerta(0),
       momentoAlerta(0) {}
@@ -21,8 +22,10 @@ void BotTelegram::iniciar() {
 
 // Polling no bloqueante: cada intervaloMs pregunta si hay mensajes nuevos.
 // Sin WiFi no lo intenta: getUpdates() trabaria el loop() esperando un timeout.
+// Si en la consulta anterior llego un mensaje, puede haber mas en cola: se
+// vuelve a consultar en la proxima vuelta del loop() sin esperar el intervalo.
 void BotTelegram::revisar() {
-  if (millis() - ultimaRevision < config.intervaloMs) {
+  if (!hayMensajesEnCola && millis() - ultimaRevision < config.intervaloMs) {
     return;
   }
   ultimaRevision = millis();
@@ -46,10 +49,13 @@ void BotTelegram::revisar() {
                   ESP.getFreeHeap());
   }
 
-  while (cantidad > 0) {
+  // Un lote por llamada (no un while como en la Practica 06): entre mensaje y
+  // mensaje el loop() vuelve a correr, asi el rele se apaga a tiempo y la
+  // alerta se evalua aunque lleguen muchos comandos seguidos.
+  if (cantidad > 0) {
     procesarMensajes(cantidad);
-    cantidad = bot.getUpdates(bot.last_message_received + 1);
   }
+  hayMensajesEnCola = cantidad > 0;
 }
 
 void BotTelegram::procesarMensajes(int cantidad) {
@@ -64,17 +70,56 @@ void BotTelegram::procesarMensajes(int cantidad) {
       continue;
     }
 
+    // Boton del teclado inline: el texto es el dato del boton (callback_data),
+    // que es el propio comando, asi que se procesa igual que si se hubiera escrito.
+    bool esBoton = bot.messages[i].type == "callback_query";
+
     // Normalizacion: "  /CLIMA " y "/clima" son el mismo comando.
     texto.trim();
     texto.toLowerCase();
-    Serial.println("[BOT] Comando recibido: " + texto);
+    Serial.println(String(esBoton ? "[BOT] Boton: " : "[BOT] Comando recibido: ") + texto);
+
+    if (esBoton) {
+      confirmarBoton(bot.messages[i].query_id);  // Saca el "cargando" enseguida
+    }
     ejecutarComando(texto);
   }
 }
 
-// Despacho de comandos: un metodo por comando. /start llega en la etapa 8.
+// Confirma el boton (answerCallbackQuery) SIN cerrar la conexion TLS.
+// answerCallbackQuery() de la libreria cierra la conexion al terminar, y el
+// mensaje siguiente tiene que pagar un handshake TLS nuevo (medido en Wokwi:
+// 5 a 7 s). Con sendPostToTelegram() (publica) la conexion que dejo
+// abierta getUpdates() sigue sirviendo para la respuesta del comando.
+void BotTelegram::confirmarBoton(const String& idBoton) {
+  unsigned long inicio = millis();
+
+  JsonDocument documento;
+  JsonObject datos = documento.to<JsonObject>();
+  datos["callback_query_id"] = idBoton;
+  String comando = "bot" + String(config.token) + "/answerCallbackQuery";
+  String respuesta = bot.sendPostToTelegram(comando, datos);
+  respuesta.trim();
+
+  // La respuesta esperada es corta y completa: {"ok":true,"result":true}.
+  // Si llego incompleta o con error, se cierra la conexion para que no queden
+  // bytes viejos que el proximo pedido confunda con su respuesta.
+  bool confirmado = respuesta.indexOf("\"ok\":true") >= 0 && respuesta.endsWith("}");
+  if (!confirmado) {
+    cliente.stop();
+  }
+  Serial.printf("[BOT] Boton %s en %lu ms\r\n", confirmado ? "confirmado" : "sin confirmar",
+                millis() - inicio);
+}
+
+// Despacho de comandos: un metodo por comando. Los botones llegan aca con
+// el mismo texto que el comando escrito, asi que no necesitan codigo propio.
 void BotTelegram::ejecutarComando(const String& comando) {
-  if (comando == "/clima") {
+  if (comando == "/start") {
+    cmdStart();
+  } else if (comando == "menu_display") {
+    cmdMenuDisplay();
+  } else if (comando == "/clima") {
     cmdClima();
   } else if (comando == "/releoff" || comando == "/rele off") {
     cmdReleOff();
@@ -93,12 +138,23 @@ void BotTelegram::ejecutarComando(const String& comando) {
 
 // Todas las respuestas van al chat autorizado (es el unico que se atiende).
 // Devuelve si Telegram confirmo el envio (lo usa la alerta para no perderse).
+// Se mide cuanto tarda cada envio: sirve para ver el costo de la red y del TLS.
 bool BotTelegram::responder(const String& texto) {
-  if (!bot.sendMessage(config.chatAutorizado, texto)) {
-    Serial.println("[BOT] Error al enviar la respuesta");
-    return false;
-  }
-  return true;
+  unsigned long inicio = millis();
+  bool enviado = bot.sendMessage(config.chatAutorizado, texto);
+  Serial.printf("[BOT] Respuesta %s en %lu ms\r\n", enviado ? "enviada" : "con ERROR",
+                millis() - inicio);
+  return enviado;
+}
+
+// Mensaje con botones debajo (teclado inline). El teclado es un JSON:
+// una lista de filas, y cada fila una lista de botones {text, callback_data}.
+bool BotTelegram::responderConTeclado(const String& texto, const String& teclado) {
+  unsigned long inicio = millis();
+  bool enviado = bot.sendMessageWithInlineKeyboard(config.chatAutorizado, texto, "", teclado);
+  Serial.printf("[BOT] Teclado %s en %lu ms\r\n", enviado ? "enviado" : "con ERROR",
+                millis() - inicio);
+  return enviado;
 }
 
 // "2.80": el umbral con 2 decimales, para todos los mensajes.
@@ -282,6 +338,33 @@ void BotTelegram::cmdThingup() {
     texto += "\n⚠️ Supera el umbral crítico de " + textoUmbral() + " V.";
   }
   responder(texto);
+}
+
+// /start: bienvenida con teclado inline. El callback_data de cada boton es el
+// comando que ejecuta: tocar "Ver Clima" es exactamente lo mismo que escribir /clima.
+// R"(...)" es un raw string: las comillas del JSON no necesitan escaparse.
+void BotTelegram::cmdStart() {
+  String texto = "👮 Guardia Clima\n";
+  texto += "Supervisión ambiental de la placa UTN.\n";
+  texto += "Elegí una opción o escribí un comando:";
+
+  String teclado = R"([
+    [{"text":"🌡 Ver Clima","callback_data":"/clima"},
+     {"text":"💡 Encender Relé","callback_data":"/releon"}],
+    [{"text":"🖥 Ver Display","callback_data":"menu_display"}]
+  ])";
+  responderConTeclado(texto, teclado);
+}
+
+// Submenu de "Ver Display": un segundo teclado con las 4 pantallas.
+void BotTelegram::cmdMenuDisplay() {
+  String teclado = R"([
+    [{"text":"LED","callback_data":"/displayled"},
+     {"text":"Potenciómetro","callback_data":"/displaypot"}],
+    [{"text":"DHT22","callback_data":"/displaydht"},
+     {"text":"Relé","callback_data":"/displayrele"}]
+  ])";
+  responderConTeclado("¿Qué querés ver en el display?", teclado);
 }
 
 // Lo llama el main cuando el temporizador del actuador termina.
