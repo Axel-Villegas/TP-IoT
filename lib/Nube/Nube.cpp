@@ -11,7 +11,7 @@ Nube::Nube(unsigned long canal, const char* apiKey,
       envioSolicitado(false),
       resultado(0) {}
 
-// Recibe el cliente de red desde el main (un WiFiClient, sin TLS: ThingSpeak usa HTTP).
+// Recibe el cliente de red desde el main (un WiFiClient).
 void Nube::iniciar(Client& cliente) {
   ThingSpeak.begin(cliente);
 }

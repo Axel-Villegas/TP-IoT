@@ -1,6 +1,6 @@
 #include "Pantalla.h"
 
-static const char* SEPARADOR = "---------------------";  // 21 guiones = ancho completo
+static const char* SEPARADOR = "---------------------";
 
 // El objeto del display solo guarda la configuracion; el bus I2C arranca en iniciar().
 Pantalla::Pantalla(uint8_t ancho, uint8_t alto, uint8_t direccion)

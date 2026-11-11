@@ -28,7 +28,7 @@ volatile bool wifiConectado = false;
 // estado del LED azul, por eso el bot lo recibe por referencia (para /displayled).
 bool wifiAnterior = false;
 
-// --- Objetos del sistema (los constructores solo guardan parametros) ---
+// --- Objetos del sistema ---
 Actuador actuador(PIN_LED_VERDE);
 Potenciometro potenciometro(PIN_POTENCIOMETRO, VOLTAJE_REFERENCIA, ADC_MAXIMO);
 SensorAmbiente sensor(PIN_DHT, INTERVALO_DHT_MS);
@@ -42,7 +42,6 @@ const ConfiguracionBot configBot = {
 };
 BotTelegram bot(configBot, {sensor, potenciometro, actuador, pantalla, nube, alerta, wifiAnterior});
 
-// ThingSpeak usa HTTP (puerto 80): alcanza un WiFiClient sin TLS.
 WiFiClient clienteThingSpeak;
 
 float ultimoVoltajeLogueado = -1.0f;  // -1 fuerza el primer log
