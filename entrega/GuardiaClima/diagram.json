@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "author": "Guardia Clima - TA 4k01",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-devkit-c-v4",
+      "id": "esp",
+      "top": 0,
+      "left": -4.76,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-dht22",
+      "id": "dht1",
+      "top": -153.3,
+      "left": -149.4,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "pot1",
+      "top": -1.3,
+      "left": -307.4,
+      "attrs": {}
+    },
+    {
+      "type": "board-ssd1306",
+      "id": "oled1",
+      "top": -160.06,
+      "left": 211.43,
+      "attrs": { "i2cAddress": "0x3c" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledVerde",
+      "top": -32.4,
+      "left": 320.6,
+      "attrs": { "color": "green" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledAzul",
+      "top": 102,
+      "left": 339.8,
+      "attrs": { "color": "blue" }
+    },
+    {
+      "type": "wokwi-relay-module",
+      "id": "rele1",
+      "top": 221,
+      "left": 220.8,
+      "attrs": {}
+    }
+  ],
+  "connections": [
+    ["esp:TX", "$serialMonitor:RX", "", []],
+    ["esp:RX", "$serialMonitor:TX", "", []],
+    ["dht1:VCC", "esp:3V3", "red", ["v38.4", "v28.8"]],
+    ["dht1:GND", "esp:GND.1", "black", ["v172.8", "v19.2"]],
+    ["dht1:SDA", "esp:33", "green", ["v0"]],
+    ["pot1:VCC", "esp:3V3", "red", ["v9.6", "h124", "v-48"]],
+    ["pot1:GND", "esp:GND.1", "black", ["v28.8", "v48"]],
+    ["pot1:SIG", "esp:32", "orange", ["v19.2", "h47.6", "v-86.4"]],
+    ["oled1:VCC", "esp:3V3", "red", ["v-38.4", "h-240"]],
+    ["oled1:GND", "esp:GND.2", "black", ["v-19.2", "h-134.4"]],
+    ["oled1:SDA", "esp:21", "violet", ["v-57.6", "h-153.53", "v249.6"]],
+    ["oled1:SCL", "esp:22", "gold", ["v-28.8", "h-162.9", "v230.4"]],
+    ["ledVerde:A", "esp:23", "green", ["v0"]],
+    ["ledVerde:C", "esp:GND.2", "black", ["v0"]],
+    ["ledAzul:A", "esp:2", "blue", ["v19.2", "h-134.4", "v-48"]],
+    ["ledAzul:C", "esp:GND.3", "black", ["v9.6", "h-230", "v-67.2"]],
+    ["rele1:IN", "esp:23", "green", ["h-76.8", "v-221"]],
+    ["rele1:VCC", "esp:5V", "red", ["h-172.95"]],
+    ["rele1:GND", "esp:GND.3", "black", ["h-86.4", "v-163.6"]]
+  ],
+  "dependencies": {}
+}

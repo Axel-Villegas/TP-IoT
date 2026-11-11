@@ -7,3 +7,4 @@
 
 # Credenciales reales (usar include/secrets.example.h como plantilla)
 include/secrets.h
+entrega/GuardiaClima/secrets.h
